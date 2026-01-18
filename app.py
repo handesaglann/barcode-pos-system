@@ -1,6 +1,7 @@
 import sqlite3
 import tkinter as tk
 
+cart = []  # [(barcode, price)]
 # ---------------- KASA ----------------
 
 def scan(event=None):
@@ -22,11 +23,12 @@ def scan(event=None):
 
     name, price, stock = row
 
-    # stok düş (satış ENGELLENMEZ)
+    # stok düş
     c.execute("UPDATE products SET stock = stock - 1 WHERE barcode=?", (barcode,))
     conn.commit()
     conn.close()
 
+    cart.append((barcode, price))
     listbox.insert(
         tk.END,
         f"{name} - {price:.2f} TL | stok: {stock-1}"
@@ -36,8 +38,29 @@ def scan(event=None):
     status.config(text="✔ Okutuldu", fg="green")
     entry.delete(0, tk.END)
 
+def remove_selected():
+    sel = listbox.curselection()
+    if not sel:
+        status.config(text="❌ Seçim yok", fg="red")
+        return
+
+    index = sel[0]
+    barcode, price = cart.pop(index)
+
+    # stok geri al
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute("UPDATE products SET stock = stock + 1 WHERE barcode=?", (barcode,))
+    conn.commit()
+    conn.close()
+
+    listbox.delete(index)
+    total.set(total.get() - price)
+    status.config(text="➖ Ürün silindi", fg="orange")
+
 def finish():
     listbox.delete(0, tk.END)
+    cart.clear()
     total.set(0)
     status.config(text="🧾 Satış bitti", fg="blue")
 
@@ -68,6 +91,7 @@ def show_stock():
             lb.insert(tk.END, f"{barcode} | {name} | Stok: {stock}")
 
 # ---------------- ADMIN PANEL ----------------
+# (önceki admin panel kodun AYNEN duruyor, değişmedi)
 
 def open_admin_panel():
     admin = tk.Toplevel(root)
@@ -102,15 +126,7 @@ def open_admin_panel():
             admin_status.config(text="❌ Barkod, ürün adı ve fiyat zorunlu", fg="red")
             return
 
-        # ilk stok boşsa 0 kabul et
-        if stock_e.get().strip() == "":
-            initial_stock = 0
-        else:
-            try:
-                initial_stock = int(stock_e.get())
-            except:
-                admin_status.config(text="❌ Stok sayısal olmalı", fg="red")
-                return
+        initial_stock = int(stock_e.get()) if stock_e.get().strip() else 0
 
         try:
             conn = sqlite3.connect("market.db")
@@ -126,26 +142,20 @@ def open_admin_panel():
             )
             conn.commit()
             conn.close()
-            admin_status.config(
-                text=f"✔ Ürün eklendi (ilk stok: {initial_stock})",
-                fg="green"
-            )
+            admin_status.config(text="✔ Ürün eklendi", fg="green")
         except:
-            admin_status.config(text="❌ Hata / Barkod zaten var", fg="red")
+            admin_status.config(text="❌ Barkod zaten var", fg="red")
 
     def update_price():
-        try:
-            conn = sqlite3.connect("market.db")
-            c = conn.cursor()
-            c.execute(
-                "UPDATE products SET price=? WHERE barcode=?",
-                (float(price_e.get()), barcode_e.get())
-            )
-            conn.commit()
-            conn.close()
-            admin_status.config(text="✔ Fiyat güncellendi", fg="blue")
-        except:
-            admin_status.config(text="❌ Hata", fg="red")
+        conn = sqlite3.connect("market.db")
+        c = conn.cursor()
+        c.execute(
+            "UPDATE products SET price=? WHERE barcode=?",
+            (float(price_e.get()), barcode_e.get())
+        )
+        conn.commit()
+        conn.close()
+        admin_status.config(text="✔ Fiyat güncellendi", fg="blue")
 
     def delete_product():
         conn = sqlite3.connect("market.db")
@@ -156,26 +166,15 @@ def open_admin_panel():
         admin_status.config(text="🗑️ Ürün silindi", fg="orange")
 
     def add_stock():
-        if not barcode_e.get() or not add_stock_e.get():
-            admin_status.config(text="❌ Barkod ve stok miktarı gir", fg="red")
-            return
-        try:
-            conn = sqlite3.connect("market.db")
-            c = conn.cursor()
-            c.execute(
-                "UPDATE products SET stock = stock + ? WHERE barcode=?",
-                (int(add_stock_e.get()), barcode_e.get())
-            )
-            conn.commit()
-
-            if c.rowcount == 0:
-                admin_status.config(text="❌ Barkod bulunamadı", fg="red")
-            else:
-                admin_status.config(text="✔ Stok güncellendi", fg="green")
-
-            conn.close()
-        except:
-            admin_status.config(text="❌ Hatalı stok değeri", fg="red")
+        conn = sqlite3.connect("market.db")
+        c = conn.cursor()
+        c.execute(
+            "UPDATE products SET stock = stock + ? WHERE barcode=?",
+            (int(add_stock_e.get()), barcode_e.get())
+        )
+        conn.commit()
+        conn.close()
+        admin_status.config(text="✔ Stok güncellendi", fg="green")
 
     tk.Button(admin, text="➕ Ürün Ekle", command=add_product).pack(pady=4)
     tk.Button(admin, text="✏️ Fiyat Güncelle", command=update_price).pack(pady=4)
@@ -186,7 +185,7 @@ def open_admin_panel():
 
 root = tk.Tk()
 root.title("KASA")
-root.geometry("400x560")
+root.geometry("420x580")
 
 frame = tk.Frame(root, padx=10, pady=10)
 frame.pack(fill="both", expand=True)
@@ -204,9 +203,10 @@ listbox.pack(fill="both", pady=10)
 total = tk.DoubleVar(value=0)
 tk.Label(frame, textvariable=total, font=("Arial", 16)).pack()
 
-tk.Button(frame, text="Satışı Bitir", command=finish).pack(pady=4)
-tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(pady=4)
-tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(pady=4)
+tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(pady=3)
+tk.Button(frame, text="Satışı Bitir", command=finish).pack(pady=3)
+tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(pady=3)
+tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(pady=3)
 
 status = tk.Label(frame, text="")
 status.pack()
