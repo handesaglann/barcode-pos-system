@@ -11,6 +11,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 cart = []  # [(barcode, price)]
 # ---------------- KASA ----------------
+print("🔥 YENİ KOD ÇALIŞIYOR 🔥")
 
 def scan(event=None):
     barcode = entry.get().strip()
@@ -404,7 +405,9 @@ app_font = tkFont.Font(family="Arial", size=base_font_size)
 
 
 root.title("KASA")
-root.geometry("420x580")
+root.geometry("520x800")
+root.minsize(520, 700)
+
 
 frame = tk.Frame(root, padx=10, pady=10)
 frame.pack(fill="both", expand=True)
@@ -426,24 +429,59 @@ total = tk.DoubleVar(value=0)
 tk.Label(frame, textvariable=total, font=font_total).pack(pady=10)
 
 
-tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(fill="x", pady=3)
-tk.Button(frame, text="Satışı Bitir", command=finish).pack(fill="x", pady=3)
-tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(fill="x", pady=3)
-
-tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(fill="x", pady=3)
-tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(fill="x", pady=3)
-
-tk.Button(
-    frame,
-    text="📅 Tarihe Göre Ciro",
-    command=show_report_by_date
-).pack(fill="x", pady=3)
+# ===============================
+# KRİTİK BUTONLAR
+# ===============================
+action_frame = tk.Frame(frame)
+action_frame.pack(fill="x", pady=25)
 
 tk.Button(
-    frame,
-    text="📊 Haftalık Ciro Grafiği",
-    command=show_weekly_chart
-).pack(fill="x", pady=3)
+    action_frame,
+    text="➖ Seçili Ürünü Sil",
+    command=remove_selected,
+    font=("Arial", 20),
+    padx=20,
+    pady=15,
+    relief="raised"
+).pack(fill="x", pady=10)
+
+tk.Button(
+    action_frame,
+    text="Satışı Bitir",
+    command=finish,
+    font=("Arial", 24, "bold"),
+    padx=20,
+    pady=18,
+    bg="#f2f2f2",
+    fg="#d32f2f",
+    activebackground="#e0e0e0",
+    activeforeground="#b71c1c",
+    relief="raised"
+).pack(fill="x", pady=15)
+
+
+
+# ===============================
+# DİĞER BUTONLAR
+# ===============================
+other_frame = tk.Frame(frame)
+other_frame.pack(fill="x", pady=10)
+
+tk.Button(other_frame, text="📦 Stokları Gör", command=show_stock)\
+    .pack(fill="x", pady=3)
+
+tk.Button(other_frame, text="🔐 Admin Panel", command=open_admin_panel)\
+    .pack(fill="x", pady=3)
+
+tk.Button(other_frame, text="📊 Gün Sonu Özeti", command=show_daily_report)\
+    .pack(fill="x", pady=3)
+
+tk.Button(other_frame, text="📅 Tarihe Göre Ciro", command=show_report_by_date)\
+    .pack(fill="x", pady=3)
+
+tk.Button(other_frame, text="📊 Haftalık Ciro Grafiği", command=show_weekly_chart)\
+    .pack(fill="x", pady=3)
+
 
 
 
