@@ -1,6 +1,7 @@
 import sqlite3
 import tkinter as tk
 from datetime import date
+import tkinter.font as tkFont
 
 
 cart = []  # [(barcode, price)]
@@ -116,8 +117,13 @@ def show_stock():
     win = tk.Toplevel(root)
     win.title("📦 Stok Durumu")
     win.geometry("450x400")
+    tk.Label(win, text="📦 Stok Durumu", font=font_big).pack(pady=5)
 
-    lb = tk.Listbox(win, font=("Arial", 11))
+    stock_font = tkFont.Font(family="Arial", size=18)
+
+
+    lb = tk.Listbox(win, font=stock_font)
+
     lb.pack(fill="both", expand=True, padx=10, pady=10)
 
     conn = sqlite3.connect("market.db")
@@ -228,36 +234,58 @@ def open_admin_panel():
     tk.Button(admin, text="➕ Stok Ekle", command=add_stock).pack(pady=6)
     
 
+def on_resize(event):
+    new_size = max(10, int(event.width / 50))
+    app_font.configure(size=new_size)
 
 # ---------------- GUI ----------------
 
 root = tk.Tk()
+
+font_normal = tkFont.Font(family="Arial", size=14)
+font_big = tkFont.Font(family="Arial", size=18, weight="bold")
+font_total = tkFont.Font(family="Arial", size=28, weight="bold")
+
+
+# ---- GLOBAL FONT ----
+base_font_size = 14
+app_font = tkFont.Font(family="Arial", size=base_font_size)
+
+
 root.title("KASA")
 root.geometry("420x580")
 
 frame = tk.Frame(root, padx=10, pady=10)
 frame.pack(fill="both", expand=True)
 
-tk.Label(frame, text="Barkod:", font=("Arial", 12)).pack(anchor="w")
+tk.Label(frame, text="Barkod:", font=font_normal).pack(anchor="w")
 
-entry = tk.Entry(frame, font=("Arial", 12))
+
+entry = tk.Entry(frame, font=font_big)
+
 entry.pack(fill="x", pady=5)
 entry.focus()
 entry.bind("<Return>", scan)
 
-listbox = tk.Listbox(frame, height=10)
+listbox = tk.Listbox(frame, height=10, font=font_big)
+
 listbox.pack(fill="both", pady=10)
 
 total = tk.DoubleVar(value=0)
-tk.Label(frame, textvariable=total, font=("Arial", 16)).pack()
+tk.Label(frame, textvariable=total, font=font_total).pack(pady=10)
 
-tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(pady=3)
-tk.Button(frame, text="Satışı Bitir", command=finish).pack(pady=3)
-tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(pady=3)
-tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(pady=3)
-tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(pady=4)
+
+tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(fill="x", pady=3)
+tk.Button(frame, text="Satışı Bitir", command=finish).pack(fill="x", pady=3)
+tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(fill="x", pady=3)
+tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(fill="x", pady=3)
+tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(fill="x", pady=3)
+
 
 status = tk.Label(frame, text="")
 status.pack()
+
+
+
 
 root.mainloop()
