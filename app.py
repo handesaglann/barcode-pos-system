@@ -2,6 +2,11 @@ import sqlite3
 import tkinter as tk
 from datetime import date
 import tkinter.font as tkFont
+from tkinter import ttk
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+
+
 
 
 cart = []  # [(barcode, price)]
@@ -108,6 +113,131 @@ def show_daily_report():
     tk.Label(win, text=f"🧾 Toplam Satış: {count}", font=("Arial", 12)).pack(pady=6)
     tk.Label(win, text=f"💰 Günlük Ciro: {total_sum:.2f} TL",
              font=("Arial", 14, "bold")).pack(pady=10)
+    
+def show_report_by_date():
+    win = tk.Toplevel(root)
+    win.title("📅 Ciro Raporu")
+    win.geometry("500x500")
+
+    # --- Arama Alanı ---
+    tk.Label(win, text="Tarih (YYYY-MM-DD):", font=font_normal).pack(pady=5)
+
+    date_entry = tk.Entry(win, font=font_big)
+    date_entry.pack(pady=5)
+
+    result_label = tk.Label(win, text="", font=font_big)
+    result_label.pack(pady=10)
+
+    def fetch():
+        selected_date = date_entry.get().strip()
+        if not selected_date:
+            result_label.config(text="❌ Tarih gir")
+            return
+
+        conn = sqlite3.connect("market.db")
+        c = conn.cursor()
+        c.execute(
+            "SELECT COUNT(*), SUM(total) FROM sales WHERE date=?",
+            (selected_date,)
+        )
+        count, total_sum = c.fetchone()
+        conn.close()
+
+        count = count or 0
+        total_sum = total_sum or 0.0
+
+        result_label.config(
+            text=f"🧾 Satış: {count}   💰 Ciro: {total_sum:.2f} TL"
+        )
+
+    tk.Button(win, text="📊 Göster", command=fetch).pack(pady=5)
+
+    # --- Liste Başlığı ---
+    tk.Label(win, text="Son Günler", font=font_big).pack(pady=10)
+
+    # --- Liste (Tablo) ---
+    table = ttk.Treeview(
+        win,
+        columns=("date", "count", "total"),
+        show="headings",
+        height=10
+    )
+
+    table.heading("date", text="Tarih")
+    table.heading("count", text="Satış")
+    table.heading("total", text="Ciro (TL)")
+
+    table.column("date", width=120, anchor="center")
+    table.column("count", width=80, anchor="center")
+    table.column("total", width=120, anchor="center")
+
+    table.pack(fill="both", expand=True, padx=10, pady=10)
+
+    # --- Verileri Çek ---
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT date, COUNT(*), SUM(total)
+        FROM sales
+        GROUP BY date
+        ORDER BY date DESC
+        LIMIT 14
+    """)
+    rows = c.fetchall()
+    conn.close()
+
+    for d, cnt, tot in rows:
+        table.insert("", "end", values=(d, cnt, f"{tot:.2f}"))
+
+
+    tk.Button(win, text="📊 Göster", command=fetch).pack(pady=10)
+
+def show_weekly_chart():
+    win = tk.Toplevel(root)
+    win.title("📊 Haftalık Ciro Grafiği")
+    win.geometry("700x500")
+
+    # --- Veriyi çek ---
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute("""
+        SELECT date, SUM(total)
+        FROM sales
+        GROUP BY date
+        ORDER BY date DESC
+        LIMIT 7
+    """)
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        tk.Label(win, text="Henüz satış yok", font=font_big).pack(pady=20)
+        return
+
+    # Grafikte soldan sağa eski → yeni olsun
+    rows.reverse()
+    dates = [r[0] for r in rows]
+    totals = [r[1] for r in rows]
+
+    # --- Matplotlib figure ---
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.bar(dates, totals)
+    ax.set_title("Son 7 Günlük Ciro")
+    ax.set_xlabel("Tarih")
+    ax.set_ylabel("TL")
+
+    # Değerleri bar üstüne yaz
+    for i, v in enumerate(totals):
+        ax.text(i, v, f"{v:.0f}", ha="center", va="bottom")
+
+    fig.tight_layout()
+
+    # --- Tkinter içine gömme ---
+    canvas = FigureCanvasTkAgg(fig, master=win)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill="both", expand=True)
+
+
 
 
 
@@ -116,16 +246,28 @@ def show_daily_report():
 def show_stock():
     win = tk.Toplevel(root)
     win.title("📦 Stok Durumu")
-    win.geometry("450x400")
+    win.geometry("600x400")
+
     tk.Label(win, text="📦 Stok Durumu", font=font_big).pack(pady=5)
 
-    stock_font = tkFont.Font(family="Arial", size=18)
+    table = ttk.Treeview(
+        win,
+        columns=("barcode", "name", "stock"),
+        show="headings",
+        height=15
+    )
 
+    table.heading("barcode", text="Barkod")
+    table.heading("name", text="Ürün Adı")
+    table.heading("stock", text="Stok")
 
-    lb = tk.Listbox(win, font=stock_font)
+    table.column("barcode", width=150, anchor="center")
+    table.column("name", width=300, anchor="w")
+    table.column("stock", width=100, anchor="center")
 
-    lb.pack(fill="both", expand=True, padx=10, pady=10)
+    table.pack(fill="both", expand=True, padx=10, pady=10)
 
+    # VERİLERİ ÇEK
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
     c.execute("SELECT barcode, name, stock FROM products")
@@ -133,14 +275,23 @@ def show_stock():
     conn.close()
 
     for barcode, name, stock in rows:
+        tag = ""
         if stock < 0:
-            lb.insert(tk.END, f"{barcode} | {name} | Stok: {stock} ❗")
-            lb.itemconfig(tk.END, fg="red")
+            tag = "negative"
         elif stock == 0:
-            lb.insert(tk.END, f"{barcode} | {name} | Stok: 0 ⚠️")
-            lb.itemconfig(tk.END, fg="orange")
-        else:
-            lb.insert(tk.END, f"{barcode} | {name} | Stok: {stock}")
+            tag = "zero"
+
+        table.insert(
+            "",
+            "end",
+            values=(barcode, name, stock),
+            tags=(tag,)
+        )
+
+    # RENKLER
+    table.tag_configure("negative", foreground="red")
+    table.tag_configure("zero", foreground="orange")
+
 
 # ---------------- ADMIN PANEL ----------------
 # (önceki admin panel kodun AYNEN duruyor, değişmedi)
@@ -278,8 +429,23 @@ tk.Label(frame, textvariable=total, font=font_total).pack(pady=10)
 tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(fill="x", pady=3)
 tk.Button(frame, text="Satışı Bitir", command=finish).pack(fill="x", pady=3)
 tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(fill="x", pady=3)
-tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(fill="x", pady=3)
+
 tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(fill="x", pady=3)
+tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(fill="x", pady=3)
+
+tk.Button(
+    frame,
+    text="📅 Tarihe Göre Ciro",
+    command=show_report_by_date
+).pack(fill="x", pady=3)
+
+tk.Button(
+    frame,
+    text="📊 Haftalık Ciro Grafiği",
+    command=show_weekly_chart
+).pack(fill="x", pady=3)
+
+
 
 
 status = tk.Label(frame, text="")
