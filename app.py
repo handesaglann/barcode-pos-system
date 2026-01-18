@@ -1,5 +1,7 @@
 import sqlite3
 import tkinter as tk
+from datetime import date
+
 
 cart = []  # [(barcode, price)]
 # ---------------- KASA ----------------
@@ -59,10 +61,54 @@ def remove_selected():
     status.config(text="➖ Ürün silindi", fg="orange")
 
 def finish():
+    global cart
+    if total.get() == 0:
+        status.config(text="❌ Sepet boş", fg="red")
+        return
+
+    today = date.today().isoformat()
+
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO sales (date, total) VALUES (?, ?)",
+        (today, total.get())
+    )
+    conn.commit()
+    conn.close()
+
     listbox.delete(0, tk.END)
     cart.clear()
     total.set(0)
-    status.config(text="🧾 Satış bitti", fg="blue")
+    status.config(text="🧾 Satış kaydedildi", fg="blue")
+
+
+
+def show_daily_report():
+    win = tk.Toplevel(root)
+    win.title("📊 Gün Sonu Özeti")
+    win.geometry("350x200")
+
+    today = date.today().isoformat()
+
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*), SUM(total) FROM sales WHERE date=?",
+        (today,)
+    )
+    count, total_sum = c.fetchone()
+    conn.close()
+
+    count = count or 0
+    total_sum = total_sum or 0.0
+
+    tk.Label(win, text=f"📅 Tarih: {today}", font=("Arial", 12)).pack(pady=6)
+    tk.Label(win, text=f"🧾 Toplam Satış: {count}", font=("Arial", 12)).pack(pady=6)
+    tk.Label(win, text=f"💰 Günlük Ciro: {total_sum:.2f} TL",
+             font=("Arial", 14, "bold")).pack(pady=10)
+
+
 
 # ---------------- STOK GÖRÜNTÜLEME ----------------
 
@@ -180,6 +226,8 @@ def open_admin_panel():
     tk.Button(admin, text="✏️ Fiyat Güncelle", command=update_price).pack(pady=4)
     tk.Button(admin, text="🗑️ Ürün Sil", command=delete_product).pack(pady=4)
     tk.Button(admin, text="➕ Stok Ekle", command=add_stock).pack(pady=6)
+    
+
 
 # ---------------- GUI ----------------
 
@@ -207,6 +255,7 @@ tk.Button(frame, text="➖ Seçili Ürünü Sil", command=remove_selected).pack(
 tk.Button(frame, text="Satışı Bitir", command=finish).pack(pady=3)
 tk.Button(frame, text="📦 Stokları Gör", command=show_stock).pack(pady=3)
 tk.Button(frame, text="🔐 Admin Panel", command=open_admin_panel).pack(pady=3)
+tk.Button(frame, text="📊 Gün Sonu Özeti", command=show_daily_report).pack(pady=4)
 
 status = tk.Label(frame, text="")
 status.pack()
