@@ -13,6 +13,34 @@ cart = []  # [(barcode, price)]
 # ---------------- KASA ----------------
 print("🔥 YENİ KOD ÇALIŞIYOR 🔥")
 
+def add_to_cart(barcode, name, price, stock):
+    price = float(price)
+    stock = int(stock)
+
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+    c.execute(
+        "UPDATE products SET stock = stock - 1 WHERE barcode=?",
+        (barcode,)
+    )
+    conn.commit()
+    conn.close()
+
+    cart.append((barcode, price))
+
+    listbox.insert(
+        tk.END,
+        f"{name} - {price:.2f} TL | stok: {stock-1}"
+    )
+
+    listbox.see(tk.END)
+    listbox.update_idletasks()
+
+    total.set(total.get() + price)
+
+
+
+
 def scan(event=None):
     barcode = entry.get().strip()
     if not barcode:
@@ -32,17 +60,9 @@ def scan(event=None):
 
     name, price, stock = row
 
-    # stok düş
-    c.execute("UPDATE products SET stock = stock - 1 WHERE barcode=?", (barcode,))
-    conn.commit()
-    conn.close()
 
-    cart.append((barcode, price))
-    listbox.insert(
-        tk.END,
-        f"{name} - {price:.2f} TL | stok: {stock-1}"
-    )
-    total.set(total.get() + price)
+    add_to_cart(barcode, name, price, stock)
+
 
     status.config(text="✔ Okutuldu", fg="green")
     entry.delete(0, tk.END)
@@ -293,6 +313,79 @@ def show_stock():
     table.tag_configure("negative", foreground="red")
     table.tag_configure("zero", foreground="orange")
 
+def show_product_list():
+    win = tk.Toplevel(root)
+    win.title("📋 Ürün Listesi")
+    win.geometry("600x500")
+
+    # --- Arama ---
+    tk.Label(win, text="Ürün Ara:", font=font_normal).pack(pady=5)
+    search_entry = tk.Entry(win, font=font_big)
+    search_entry.pack(fill="x", padx=10)
+
+    # --- Tablo ---
+    table = ttk.Treeview(
+        win,
+        columns=("barcode", "name", "price", "stock"),
+        show="headings",
+        height=15
+    )
+
+    table.heading("barcode", text="Barkod")
+    table.heading("name", text="Ürün")
+    table.heading("price", text="Fiyat")
+    table.heading("stock", text="Stok")
+
+    table.column("barcode", width=120)
+    table.column("name", width=250)
+    table.column("price", width=80, anchor="center")
+    table.column("stock", width=80, anchor="center")
+
+    table.pack(fill="both", expand=True, padx=10, pady=10)
+
+    def load_products(filter_text=""):
+        for i in table.get_children():
+            table.delete(i)
+
+        conn = sqlite3.connect("market.db")
+        c = conn.cursor()
+        c.execute("""
+            SELECT barcode, name, price, stock
+            FROM products
+            WHERE name LIKE ?
+            ORDER BY name ASC
+        """, (f"%{filter_text}%",))
+        rows = c.fetchall()
+        conn.close()
+
+        for r in rows:
+            table.insert("", "end", values=r)
+
+    load_products()
+
+    def on_search(event):
+        load_products(search_entry.get())
+
+    search_entry.bind("<KeyRelease>", on_search)
+
+    def add_selected():
+        sel = table.selection()
+        if not sel:
+            return
+
+        item = table.item(sel[0])["values"]
+        barcode, name, price, stock = item
+
+        add_to_cart(barcode, name, price, stock)
+
+    tk.Button(
+        win,
+        text="➕ Sepete Ekle",
+        font=font_big,
+        command=add_selected
+    ).pack(pady=10)
+
+
 
 # ---------------- ADMIN PANEL ----------------
 # (önceki admin panel kodun AYNEN duruyor, değişmedi)
@@ -466,6 +559,13 @@ tk.Button(
 # ===============================
 other_frame = tk.Frame(frame)
 other_frame.pack(fill="x", pady=10)
+
+tk.Button(
+    other_frame,
+    text="📋 Ürün Listesi",
+    command=show_product_list
+).pack(fill="x", pady=3)
+
 
 tk.Button(other_frame, text="📦 Stokları Gör", command=show_stock)\
     .pack(fill="x", pady=3)
