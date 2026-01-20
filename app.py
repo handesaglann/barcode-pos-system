@@ -30,7 +30,7 @@ def add_to_cart(barcode, name, price, stock):
 
     listbox.insert(
         tk.END,
-        f"{name} - {price:.2f} TL | stok: {stock-1}"
+        f"{name} - {price:.2f} TL "
     )
 
     listbox.see(tk.END)
