@@ -70,6 +70,8 @@ def add_to_cart(barcode, name, price, stock):
         text=f"✔ {name} sepete eklendi",
         fg="green"
     )
+    root.bell()
+
 
 
 
@@ -101,6 +103,8 @@ def scan(event=None):
 
 
     status.config(text="✔ Okutuldu", fg="green")
+    root.bell()
+
     entry.delete(0, tk.END)
 
 def remove_selected():
@@ -125,6 +129,47 @@ def remove_selected():
     total_label.config(text=f"Total: {total.get():.2f} TL")
 
     status.config(text="➖ Ürün silindi", fg="orange")
+
+def process_return(barcode, quantity):
+    quantity = int(quantity)
+    today = date.today().isoformat()
+
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+
+    # ürünü bul
+    c.execute(
+        "SELECT name, price FROM products WHERE barcode=?",
+        (barcode,)
+    )
+    row = c.fetchone()
+
+    if not row:
+        conn.close()
+        raise ValueError("❌ Ürün bulunamadı")
+
+    name, price = row
+    total_refund = price * quantity
+
+    # 1️⃣ stok geri ekle
+    c.execute(
+        "UPDATE products SET stock = stock + ? WHERE barcode=?",
+        (quantity, barcode)
+    )
+
+    
+
+    # 3️⃣ iade kaydı
+    c.execute("""
+        INSERT INTO returns (barcode, quantity, total_price, date)
+        VALUES (?, ?, ?, ?)
+    """, (barcode, quantity, total_refund, today))
+
+    conn.commit()
+    conn.close()
+
+    return f"↩ {name} x{quantity} iade alındı (-{total_refund:.2f} TL)"
+
 
 def finish():
     global cart
@@ -193,57 +238,6 @@ def show_day_detail(date_str):
     win.geometry("350x400")
     win.resizable(False, False)
 
-    tk.Label(
-        win,
-        text=f"{date_str} Satış Detayı",
-        font=("Arial", 14, "bold")
-    ).pack(pady=10)
-
-    frame = tk.Frame(win)
-    frame.pack(pady=10)
-
-    total_qty = 0
-    for name, qty in rows:
-        total_qty += qty
-        tk.Label(
-            frame,
-            text=f"{name:<15} x {qty}",
-            font=("Arial", 11),
-            anchor="w"
-        ).pack(anchor="w")
-
-    tk.Label(win, text="----------------").pack(pady=10)
-
-    tk.Label(
-        win,
-        text=f"Toplam ürün: {total_qty}",
-        font=("Arial", 12, "bold")
-    ).pack()
-
-def show_day_detail(date_str):
-    conn = sqlite3.connect("market.db")
-    c = conn.cursor()
-
-    c.execute("""
-        SELECT product_name, COUNT(*) 
-        FROM sale_items
-        WHERE sale_date = ?
-        GROUP BY product_name
-        ORDER BY COUNT(*) DESC
-    """, (date_str,))
-
-    rows = c.fetchall()
-    conn.close()
-
-    if not rows:
-        messagebox.showinfo("Bilgi", "Bu tarihte satış yok.")
-        return
-
-    win = tk.Toplevel(root)
-    win.title(f"{date_str} Satış Detayı")
-    win.geometry("350x400")
-    win.resizable(False, False)
-
     tk.Label(win, text=f"{date_str} Satış Detayı",
              font=("Arial", 14, "bold")).pack(pady=10)
 
@@ -266,26 +260,53 @@ def show_day_detail(date_str):
 def show_daily_report():
     win = tk.Toplevel(root)
     win.title("📊 Gün Sonu Özeti")
-    win.geometry("350x200")
+    win.geometry("350x230")
 
     today = date.today().isoformat()
 
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
+
+    # 🟢 Satışlar
     c.execute(
-        "SELECT COUNT(*), SUM(total) FROM sales WHERE date=?",
+        "SELECT COUNT(*), IFNULL(SUM(total),0) FROM sales WHERE date=?",
         (today,)
     )
-    count, total_sum = c.fetchone()
+    count, sales_total = c.fetchone()
+
+    # 🟡 İadeler
+    c.execute(
+        "SELECT IFNULL(SUM(total_price),0) FROM returns WHERE date=?",
+        (today,)
+    )
+    returns_total = c.fetchone()[0]
+
     conn.close()
 
-    count = count or 0
-    total_sum = total_sum or 0.0
+    net_total = sales_total - returns_total
 
-    tk.Label(win, text=f"📅 Tarih: {today}", font=("Arial", 12)).pack(pady=6)
-    tk.Label(win, text=f"🧾 Toplam Satış: {count}", font=("Arial", 12)).pack(pady=6)
-    tk.Label(win, text=f"💰 Günlük Ciro: {total_sum:.2f} TL",
-             font=("Arial", 14, "bold")).pack(pady=10)
+    tk.Label(win, text=f"📅 Tarih: {today}", font=("Arial", 12)).pack(pady=5)
+    tk.Label(win, text=f"🧾 Satış Sayısı: {count}", font=("Arial", 12)).pack(pady=5)
+
+    tk.Label(
+        win,
+        text=f"💰 Satış: {sales_total:.2f} TL",
+        font=("Arial", 12)
+    ).pack(pady=2)
+
+    tk.Label(
+        win,
+        text=f"↩ İade: {returns_total:.2f} TL",
+        font=("Arial", 12)
+    ).pack(pady=2)
+
+    tk.Label(
+        win,
+        text=f"✅ Net Ciro: {net_total:.2f} TL",
+        font=("Arial", 14, "bold"),
+        fg="green"
+    ).pack(pady=10)
+
     
 def show_report_by_date():
     win = tk.Toplevel(root)
@@ -513,18 +534,16 @@ def show_product_list():
     win.title("📋 Ürün Listesi")
     win.geometry("600x500")
 
-    # --- Status ---
+    # ---------- ÜST DURUM ----------
     list_status = tk.Label(win, text="", font=("Arial", 10))
     list_status.pack(pady=5)
 
-    # --- Arama ---
+    # ---------- ARAMA ----------
     tk.Label(win, text="Ürün Ara:", font=font_normal).pack(pady=5)
     search_entry = tk.Entry(win, font=font_big)
     search_entry.pack(fill="x", padx=10)
 
-    # =========================
-    # TABLO + SCROLLBAR
-    # =========================
+    # ---------- TABLO ----------
     table_frame = tk.Frame(win)
     table_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -537,7 +556,6 @@ def show_product_list():
         show="headings",
         yscrollcommand=scrollbar.set
     )
-
     scrollbar.config(command=table.yview)
 
     table.heading("barcode", text="Barkod")
@@ -545,14 +563,18 @@ def show_product_list():
     table.heading("price", text="Fiyat")
     table.heading("stock", text="Stok")
 
-    table.column("barcode", width=120)
-    table.column("name", width=250)
+    table.column("barcode", width=120, anchor="center")
+    table.column("name", width=250, anchor="w")
     table.column("price", width=80, anchor="center")
     table.column("stock", width=80, anchor="center")
 
     table.pack(side="left", fill="both", expand=True)
 
-    # --- Verileri Yükle ---
+    # ---------- RENKLER ----------
+    table.tag_configure("negative", foreground="red")
+    table.tag_configure("zero", foreground="orange")
+
+    # ---------- VERİ YÜKLE ----------
     def load_products(filter_text=""):
         for i in table.get_children():
             table.delete(i)
@@ -568,17 +590,30 @@ def show_product_list():
         rows = c.fetchall()
         conn.close()
 
-        for r in rows:
-            table.insert("", "end", values=r)
+        for barcode, name, price, stock in rows:
+            tag = ""
+            if stock < 0:
+                tag = "negative"
+            elif stock == 0:
+                tag = "zero"
 
-    load_products()
+            table.insert(
+                "",
+                "end",
+                values=(barcode, name, f"{price:.2f}", stock),
+                tags=(tag,)
+            )
 
+    # 🔑 ÖNEMLİ: render bug fix
+    win.after(100, load_products)
+
+    # ---------- ARAMA EVENT ----------
     def on_search(event):
         load_products(search_entry.get())
 
     search_entry.bind("<KeyRelease>", on_search)
 
-    # --- Sepete Ekle ---
+    # ---------- SEPETE EKLE ----------
     def add_selected():
         sel = table.selection()
         if not sel:
@@ -586,12 +621,14 @@ def show_product_list():
             return
 
         barcode, name, price, stock = table.item(sel[0])["values"]
-        add_to_cart(barcode, name, price, stock)
 
-        list_status.config(
-            text=f"✔ {name} sepete eklendi",
-            fg="green"
-        )
+        if int(stock) <= 0:
+            list_status.config(text="❌ Stok yok", fg="red")
+            root.bell()
+            return
+
+        add_to_cart(barcode, name, float(price), stock)
+        list_status.config(text=f"✔ {name} sepete eklendi", fg="green")
 
     tk.Button(
         win,
@@ -786,8 +823,41 @@ total_label.pack(pady=10)
 # ===============================
 # KRİTİK BUTONLAR
 # ===============================
+
 action_frame = tk.Frame(frame)
 action_frame.pack(fill="x", pady=25)
+
+def open_return_window():
+    win = tk.Toplevel(root)
+    win.title("↩ Ürün İade")
+    win.geometry("300x220")
+
+    tk.Label(win, text="Barkod").pack(pady=5)
+    barcode_e = tk.Entry(win, font=font_big)
+    barcode_e.pack()
+
+    tk.Label(win, text="Adet").pack(pady=5)
+    qty_e = tk.Entry(win, font=font_big)
+    qty_e.pack()
+
+    info = tk.Label(win, text="")
+    info.pack(pady=10)
+
+    def confirm():
+        try:
+            msg = process_return(barcode_e.get(), qty_e.get())
+            info.config(text=msg, fg="green")
+        except Exception as e:
+            info.config(text=str(e), fg="red")
+
+    tk.Button(
+        win,
+        text="İade Et",
+        command=confirm,
+        font=("Arial", 16, "bold")
+    ).pack(pady=10)
+
+
 
 tk.Button(
     action_frame,
@@ -798,6 +868,16 @@ tk.Button(
     pady=15,
     relief="raised"
 ).pack(fill="x", pady=10)
+
+tk.Button(
+    action_frame,
+    text="↩ Ürün İade",
+    command=open_return_window,
+    font=("Arial", 20),
+    padx=20,
+    pady=15
+).pack(fill="x", pady=10)
+
 
 tk.Button(
     action_frame,
