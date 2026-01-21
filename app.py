@@ -20,6 +20,7 @@ def add_to_cart(barcode, name, price, stock):
     price = float(price)
     stock = int(stock)
 
+    # stok düş
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
     c.execute(
@@ -29,23 +30,48 @@ def add_to_cart(barcode, name, price, stock):
     conn.commit()
     conn.close()
 
+    # sepete ekle
     cart.append((barcode, name, price))
 
+    # aynı üründen kaç tane var?
+    count = sum(1 for b, n, p in cart if b == barcode)
+    total_price = count * price
 
-    listbox.insert(
-        tk.END,
-        f"{name} - {price:.2f} TL "
-    )
+    found = False
+    for i in range(listbox.size()):
+        text = listbox.get(i)
+        if text.startswith(name):
+            listbox.delete(i)
+
+            # x1 yazma, sadece 2+ göster
+            if count == 1:
+                display = f"{name} - {price:.2f} TL"
+            else:
+                display = f"{name} x{count} - {total_price:.2f} TL"
+
+            listbox.insert(i, display)
+            found = True
+            break
+
+    if not found:
+        listbox.insert(
+            tk.END,
+            f"{name} - {price:.2f} TL"
+        )
 
     listbox.see(tk.END)
     listbox.update_idletasks()
 
     total.set(total.get() + price)
+    total_label.config(text=f"Total: {total.get():.2f} TL")
+
 
     status.config(
-    text=f"✔ {name} sepete eklendi",
-    fg="green"
-)
+        text=f"✔ {name} sepete eklendi",
+        fg="green"
+    )
+
+
 
 
 
@@ -96,6 +122,8 @@ def remove_selected():
 
     listbox.delete(index)
     total.set(total.get() - price)
+    total_label.config(text=f"Total: {total.get():.2f} TL")
+
     status.config(text="➖ Ürün silindi", fg="orange")
 
 def finish():
@@ -128,6 +156,8 @@ def finish():
     listbox.delete(0, tk.END)
     cart.clear()
     total.set(0)
+    total_label.config(text="Total: 0.00 TL")
+
     status.config(text="🧾 Satış kaydedildi", fg="blue")
 
     messagebox.showinfo(
@@ -652,8 +682,47 @@ root.geometry("520x800")
 root.minsize(520, 700)
 
 
-frame = tk.Frame(root, padx=10, pady=10)
-frame.pack(fill="both", expand=True)
+# --- SCROLL ALTYAPISI ---
+canvas = tk.Canvas(root)
+scrollbar = tk.Scrollbar(root, orient="vertical", command=canvas.yview)
+scrollable_frame = tk.Frame(canvas, padx=10, pady=10)
+
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(
+        scrollregion=canvas.bbox("all")
+    )
+)
+
+canvas_window = canvas.create_window(
+    (0, 0),
+    window=scrollable_frame,
+    anchor="nw"
+)
+
+
+
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side="left", fill="both", expand=True)
+
+
+scrollbar.pack(side="right", fill="y")
+
+def resize_canvas(event):
+    canvas.itemconfig(canvas_window, width=event.width)
+
+canvas.bind("<Configure>", resize_canvas)
+
+
+# 👉 ARTIK frame BU
+frame = scrollable_frame
+
+def _on_mousewheel(event):
+    canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
 
 tk.Label(frame, text="Barkod:", font=font_normal).pack(anchor="w")
 
@@ -664,12 +733,19 @@ entry.pack(fill="x", pady=5)
 entry.focus()
 entry.bind("<Return>", scan)
 
-listbox = tk.Listbox(frame, height=10, font=font_big)
+listbox = tk.Listbox(frame, height=16, font=font_big)
+
 
 listbox.pack(fill="both", pady=10)
 
 total = tk.DoubleVar(value=0)
-tk.Label(frame, textvariable=total, font=font_total).pack(pady=10)
+total_label = tk.Label(
+    frame,
+    text="Total: 0.00 TL",
+    font=font_total
+)
+total_label.pack(pady=10)
+
 
 
 # ===============================
