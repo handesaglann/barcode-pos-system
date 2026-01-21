@@ -5,11 +5,14 @@ import tkinter.font as tkFont
 from tkinter import ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from tkinter import messagebox
 
 
 
 
-cart = []  # [(barcode, price)]
+
+cart = []  # [(barcode, name, price)]
+
 # ---------------- KASA ----------------
 print("🔥 YENİ KOD ÇALIŞIYOR 🔥")
 
@@ -26,7 +29,8 @@ def add_to_cart(barcode, name, price, stock):
     conn.commit()
     conn.close()
 
-    cart.append((barcode, price))
+    cart.append((barcode, name, price))
+
 
     listbox.insert(
         tk.END,
@@ -97,10 +101,20 @@ def finish():
 
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
+
+    # Günlük toplam satış (özet)
     c.execute(
         "INSERT INTO sales (date, total) VALUES (?, ?)",
         (today, total.get())
     )
+
+    # Satış detayları (ürün bazlı)
+    for barcode, name, price in cart:
+        c.execute("""
+            INSERT INTO sale_items (sale_date, barcode, product_name, price)
+            VALUES (?, ?, ?, ?)
+        """, (today, barcode, name, price))
+
     conn.commit()
     conn.close()
 
@@ -108,6 +122,101 @@ def finish():
     cart.clear()
     total.set(0)
     status.config(text="🧾 Satış kaydedildi", fg="blue")
+
+
+from tkinter import messagebox
+
+def show_day_detail(date_str):
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT product_name, COUNT(*) 
+        FROM sale_items
+        WHERE sale_date = ?
+        GROUP BY product_name
+        ORDER BY COUNT(*) DESC
+    """, (date_str,))
+
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        messagebox.showinfo("Bilgi", "Bu tarihte satış yok.")
+        return
+
+    win = tk.Toplevel(root)
+    win.title(f"{date_str} Satış Detayı")
+    win.geometry("350x400")
+    win.resizable(False, False)
+
+    tk.Label(
+        win,
+        text=f"{date_str} Satış Detayı",
+        font=("Arial", 14, "bold")
+    ).pack(pady=10)
+
+    frame = tk.Frame(win)
+    frame.pack(pady=10)
+
+    total_qty = 0
+    for name, qty in rows:
+        total_qty += qty
+        tk.Label(
+            frame,
+            text=f"{name:<15} x {qty}",
+            font=("Arial", 11),
+            anchor="w"
+        ).pack(anchor="w")
+
+    tk.Label(win, text="----------------").pack(pady=10)
+
+    tk.Label(
+        win,
+        text=f"Toplam ürün: {total_qty}",
+        font=("Arial", 12, "bold")
+    ).pack()
+
+def show_day_detail(date_str):
+    conn = sqlite3.connect("market.db")
+    c = conn.cursor()
+
+    c.execute("""
+        SELECT product_name, COUNT(*) 
+        FROM sale_items
+        WHERE sale_date = ?
+        GROUP BY product_name
+        ORDER BY COUNT(*) DESC
+    """, (date_str,))
+
+    rows = c.fetchall()
+    conn.close()
+
+    if not rows:
+        messagebox.showinfo("Bilgi", "Bu tarihte satış yok.")
+        return
+
+    win = tk.Toplevel(root)
+    win.title(f"{date_str} Satış Detayı")
+    win.geometry("350x400")
+    win.resizable(False, False)
+
+    tk.Label(win, text=f"{date_str} Satış Detayı",
+             font=("Arial", 14, "bold")).pack(pady=10)
+
+    frame = tk.Frame(win)
+    frame.pack(pady=10)
+
+    total_qty = 0
+    for name, qty in rows:
+        total_qty += qty
+        tk.Label(frame, text=f"{name} x {qty}",
+                 font=("Arial", 11), anchor="w").pack(anchor="w")
+
+    tk.Label(win, text="----------------").pack(pady=10)
+
+    tk.Label(win, text=f"Toplam ürün: {total_qty}",
+             font=("Arial", 12, "bold")).pack()
 
 
 
@@ -138,7 +247,7 @@ def show_daily_report():
 def show_report_by_date():
     win = tk.Toplevel(root)
     win.title("📅 Ciro Raporu")
-    win.geometry("500x500")
+    win.geometry("500x550")
 
     # --- Arama Alanı ---
     tk.Label(win, text="Tarih (YYYY-MM-DD):", font=font_normal).pack(pady=5)
@@ -210,8 +319,23 @@ def show_report_by_date():
     for d, cnt, tot in rows:
         table.insert("", "end", values=(d, cnt, f"{tot:.2f}"))
 
+    # --- DETAY BUTONU ---
+    def show_detail_selected():
+        selected = table.selection()
+        if not selected:
+            messagebox.showwarning("Uyarı", "Lütfen bir tarih seçin.")
+            return
 
-    tk.Button(win, text="📊 Göster", command=fetch).pack(pady=10)
+        date_str = table.item(selected[0])["values"][0]
+        show_day_detail(date_str)
+
+    tk.Button(
+        win,
+        text="📄 Detay Göster",
+        font=font_big,
+        command=show_detail_selected
+    ).pack(pady=10)
+
 
 def show_weekly_chart():
     win = tk.Toplevel(root)
