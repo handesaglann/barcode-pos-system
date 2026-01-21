@@ -42,6 +42,12 @@ def add_to_cart(barcode, name, price, stock):
 
     total.set(total.get() + price)
 
+    status.config(
+    text=f"✔ {name} sepete eklendi",
+    fg="green"
+)
+
+
 
 
 
@@ -78,7 +84,8 @@ def remove_selected():
         return
 
     index = sel[0]
-    barcode, price = cart.pop(index)
+    barcode, name, price = cart.pop(index)
+
 
     # stok geri al
     conn = sqlite3.connect("market.db")
@@ -122,6 +129,12 @@ def finish():
     cart.clear()
     total.set(0)
     status.config(text="🧾 Satış kaydedildi", fg="blue")
+
+    messagebox.showinfo(
+    "Satış Tamamlandı",
+    "Satış başarıyla kaydedildi."
+)
+
 
 
 from tkinter import messagebox
@@ -442,6 +455,10 @@ def show_product_list():
     win.title("📋 Ürün Listesi")
     win.geometry("600x500")
 
+    # --- Status ---
+    list_status = tk.Label(win, text="", font=("Arial", 10))
+    list_status.pack(pady=5)
+
     # --- Arama ---
     tk.Label(win, text="Ürün Ara:", font=font_normal).pack(pady=5)
     search_entry = tk.Entry(win, font=font_big)
@@ -495,6 +512,7 @@ def show_product_list():
     def add_selected():
         sel = table.selection()
         if not sel:
+            list_status.config(text="❌ Ürün seçilmedi", fg="red")
             return
 
         item = table.item(sel[0])["values"]
@@ -502,12 +520,20 @@ def show_product_list():
 
         add_to_cart(barcode, name, price, stock)
 
+        list_status.config(
+            text=f"✔ {name} sepete eklendi",
+            fg="green"
+        )
+
+    # --- BUTON (KRİTİK) ---
     tk.Button(
         win,
         text="➕ Sepete Ekle",
-        font=font_big,
+        font=("Arial", 16, "bold"),
         command=add_selected
     ).pack(pady=10)
+
+
 
 
 
