@@ -894,6 +894,7 @@ tk.Button(
     font=("Arial", 20),
     padx=20,
     pady=15,
+    fg="#f9a825",        # 🟡 sarı yazı
     relief="raised"
 ).pack(fill="x", pady=10)
 
