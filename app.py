@@ -290,9 +290,11 @@ def show_daily_report():
 def show_report_by_date():
     win = tk.Toplevel(root)
     win.title("📅 Ciro Raporu")
-    win.geometry("500x550")
+    win.geometry("520x600")
 
-    # --- Arama Alanı ---
+    # =========================
+    # TARİH GİRİŞİ
+    # =========================
     tk.Label(win, text="Tarih (YYYY-MM-DD):", font=font_normal).pack(pady=5)
 
     date_entry = tk.Entry(win, font=font_big)
@@ -325,28 +327,42 @@ def show_report_by_date():
 
     tk.Button(win, text="📊 Göster", command=fetch).pack(pady=5)
 
-    # --- Liste Başlığı ---
+    # =========================
+    # BAŞLIK
+    # =========================
     tk.Label(win, text="Son Günler", font=font_big).pack(pady=10)
 
-    # --- Liste (Tablo) ---
+    # =========================
+    # TABLO + SCROLLBAR
+    # =========================
+    table_frame = tk.Frame(win)
+    table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    scrollbar = ttk.Scrollbar(table_frame, orient="vertical")
+    scrollbar.pack(side="right", fill="y")
+
     table = ttk.Treeview(
-        win,
+        table_frame,
         columns=("date", "count", "total"),
         show="headings",
-        height=10
+        yscrollcommand=scrollbar.set
     )
+
+    scrollbar.config(command=table.yview)
 
     table.heading("date", text="Tarih")
     table.heading("count", text="Satış")
     table.heading("total", text="Ciro (TL)")
 
-    table.column("date", width=120, anchor="center")
+    table.column("date", width=140, anchor="center")
     table.column("count", width=80, anchor="center")
     table.column("total", width=120, anchor="center")
 
-    table.pack(fill="both", expand=True, padx=10, pady=10)
+    table.pack(side="left", fill="both", expand=True)
 
-    # --- Verileri Çek ---
+    # =========================
+    # VERİLERİ ÇEK
+    # =========================
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
     c.execute("""
@@ -354,7 +370,6 @@ def show_report_by_date():
         FROM sales
         GROUP BY date
         ORDER BY date DESC
-        LIMIT 14
     """)
     rows = c.fetchall()
     conn.close()
@@ -362,7 +377,9 @@ def show_report_by_date():
     for d, cnt, tot in rows:
         table.insert("", "end", values=(d, cnt, f"{tot:.2f}"))
 
-    # --- DETAY BUTONU ---
+    # =========================
+    # DETAY BUTONU
+    # =========================
     def show_detail_selected():
         selected = table.selection()
         if not selected:
@@ -438,12 +455,23 @@ def show_stock():
 
     tk.Label(win, text="📦 Stok Durumu", font=font_big).pack(pady=5)
 
+    # =========================
+    # TABLO + SCROLLBAR
+    # =========================
+    table_frame = tk.Frame(win)
+    table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    scrollbar = ttk.Scrollbar(table_frame, orient="vertical")
+    scrollbar.pack(side="right", fill="y")
+
     table = ttk.Treeview(
-        win,
+        table_frame,
         columns=("barcode", "name", "stock"),
         show="headings",
-        height=15
+        yscrollcommand=scrollbar.set
     )
+
+    scrollbar.config(command=table.yview)
 
     table.heading("barcode", text="Barkod")
     table.heading("name", text="Ürün Adı")
@@ -453,9 +481,9 @@ def show_stock():
     table.column("name", width=300, anchor="w")
     table.column("stock", width=100, anchor="center")
 
-    table.pack(fill="both", expand=True, padx=10, pady=10)
+    table.pack(side="left", fill="both", expand=True)
 
-    # VERİLERİ ÇEK
+    # --- Verileri Çek ---
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
     c.execute("SELECT barcode, name, stock FROM products")
@@ -476,9 +504,9 @@ def show_stock():
             tags=(tag,)
         )
 
-    # RENKLER
     table.tag_configure("negative", foreground="red")
     table.tag_configure("zero", foreground="orange")
+
 
 def show_product_list():
     win = tk.Toplevel(root)
@@ -494,13 +522,23 @@ def show_product_list():
     search_entry = tk.Entry(win, font=font_big)
     search_entry.pack(fill="x", padx=10)
 
-    # --- Tablo ---
+    # =========================
+    # TABLO + SCROLLBAR
+    # =========================
+    table_frame = tk.Frame(win)
+    table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    scrollbar = ttk.Scrollbar(table_frame, orient="vertical")
+    scrollbar.pack(side="right", fill="y")
+
     table = ttk.Treeview(
-        win,
+        table_frame,
         columns=("barcode", "name", "price", "stock"),
         show="headings",
-        height=15
+        yscrollcommand=scrollbar.set
     )
+
+    scrollbar.config(command=table.yview)
 
     table.heading("barcode", text="Barkod")
     table.heading("name", text="Ürün")
@@ -512,8 +550,9 @@ def show_product_list():
     table.column("price", width=80, anchor="center")
     table.column("stock", width=80, anchor="center")
 
-    table.pack(fill="both", expand=True, padx=10, pady=10)
+    table.pack(side="left", fill="both", expand=True)
 
+    # --- Verileri Yükle ---
     def load_products(filter_text=""):
         for i in table.get_children():
             table.delete(i)
@@ -539,15 +578,14 @@ def show_product_list():
 
     search_entry.bind("<KeyRelease>", on_search)
 
+    # --- Sepete Ekle ---
     def add_selected():
         sel = table.selection()
         if not sel:
             list_status.config(text="❌ Ürün seçilmedi", fg="red")
             return
 
-        item = table.item(sel[0])["values"]
-        barcode, name, price, stock = item
-
+        barcode, name, price, stock = table.item(sel[0])["values"]
         add_to_cart(barcode, name, price, stock)
 
         list_status.config(
@@ -555,15 +593,12 @@ def show_product_list():
             fg="green"
         )
 
-    # --- BUTON (KRİTİK) ---
     tk.Button(
         win,
         text="➕ Sepete Ekle",
         font=("Arial", 16, "bold"),
         command=add_selected
     ).pack(pady=10)
-
-
 
 
 
