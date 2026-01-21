@@ -332,19 +332,37 @@ def show_report_by_date():
 
         conn = sqlite3.connect("market.db")
         c = conn.cursor()
+
+        # 1️⃣ Satışlar
         c.execute(
-            "SELECT COUNT(*), SUM(total) FROM sales WHERE date=?",
+            "SELECT COUNT(*), IFNULL(SUM(total),0) FROM sales WHERE date=?",
             (selected_date,)
         )
-        count, total_sum = c.fetchone()
+        count, sales_total = c.fetchone()
+
+        # 2️⃣ İadeler
+        c.execute(
+            "SELECT IFNULL(SUM(total_price),0) FROM returns WHERE date=?",
+            (selected_date,)
+        )
+        returns_total = c.fetchone()[0]
+
         conn.close()
 
-        count = count or 0
-        total_sum = total_sum or 0.0
+        # 3️⃣ Net Ciro
+        net_total = sales_total - returns_total
 
+        # 4️⃣ Ekrana yaz
         result_label.config(
-            text=f"🧾 Satış: {count}   💰 Ciro: {total_sum:.2f} TL"
+            text=(
+                f"🧾 Satış Sayısı: {count}\n"
+                f"💰 Satış: {sales_total:.2f} TL\n"
+                f"↩ İade: {returns_total:.2f} TL\n"
+                f"✅ Net Ciro: {net_total:.2f} TL"
+            )
         )
+
+        
 
     tk.Button(win, text="📊 Göster", command=fetch).pack(pady=5)
 
@@ -387,16 +405,26 @@ def show_report_by_date():
     conn = sqlite3.connect("market.db")
     c = conn.cursor()
     c.execute("""
-        SELECT date, COUNT(*), SUM(total)
-        FROM sales
-        GROUP BY date
-        ORDER BY date DESC
-    """)
+    SELECT 
+        s.date,
+        COUNT(*) AS sale_count,
+        IFNULL(SUM(s.total), 0) -
+        IFNULL((
+            SELECT SUM(r.total_price)
+            FROM returns r
+            WHERE r.date = s.date
+        ), 0) AS net_total
+    FROM sales s
+    GROUP BY s.date
+    ORDER BY s.date DESC
+""")
+
     rows = c.fetchall()
     conn.close()
 
-    for d, cnt, tot in rows:
-        table.insert("", "end", values=(d, cnt, f"{tot:.2f}"))
+    for d, cnt, net in rows:
+        table.insert("", "end", values=(d, cnt, f"{net:.2f}"))
+
 
     # =========================
     # DETAY BUTONU
